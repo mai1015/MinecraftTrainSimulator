@@ -22,6 +22,10 @@
   		<id>robingrether-repo</id>
   		<url>http://repo.robingrether.de/</url>
   	</repository>
+	  <repository>
+		  <id>dj-tcraft repository</id>
+		  <url>http://ci.dj-tcraft.nl/plugin/repository/everything/</url>
+	  </repository>
   </repositories>
   
   <dependencies>
@@ -46,16 +50,14 @@
   	<dependency>
   		<groupId>com.bergerkiller.bukkit</groupId>
   		<artifactId>BKCommonLib</artifactId>
-  		<version>1.12-v1</version>
-  		<scope>system</scope>
-  		<systemPath>${project.basedir}/../../workspace/Libraries/BKCommonLib-1.12-v1.jar</systemPath>
+  		<version>1.12-v4-SNAPSHOT</version>
+		<scope>compile</scope>
   	</dependency>
   	<dependency>
   		<groupId>com.bergerkiller.bukkit</groupId>
   		<artifactId>TrainCarts</artifactId>
-  		<version>1.11.2-v2</version>
-  		<scope>system</scope>
-  		<systemPath>${project.basedir}/../../workspace/Libraries/TrainCarts-1.11.2-v2.jar</systemPath>
+  		<version>1.12-v2</version>
+		<scope>compile</scope>
   	</dependency>
   </dependencies>
   
@@ -83,6 +85,7 @@
   				<artifactSet>
   					<includes>
   						<include>org.bstats:*</include>
+						<include>de.robingrether.util:utility</include>
   					</includes>
   				</artifactSet>
   				<relocations>
@@ -90,6 +93,10 @@
   						<pattern>org.bstats</pattern>
   						<shadedPattern>de.robingrether.mcts.bstats</shadedPattern>
   					</relocation>
+                    <relocation>
+                        <pattern>de.robingrether.util</pattern>
+                        <shadedPattern>de.robingrether.util</shadedPattern>
+                    </relocation>
   				</relocations>
   			</configuration>
   			<executions>
