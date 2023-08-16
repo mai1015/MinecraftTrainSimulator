@@ -19,14 +19,15 @@ import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.block.BlockRedstoneEvent;
 import org.bukkit.event.inventory.InventoryPickupItemEvent;
+import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.vehicle.VehicleEnterEvent;
 import org.bukkit.event.vehicle.VehicleExitEvent;
 import org.bukkit.inventory.InventoryHolder;
-import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.util.Vector;
 
 import com.bergerkiller.bukkit.tc.controller.MinecartGroup;
 
+import de.robingrether.mcts.io.UpdateCheck;
 import de.robingrether.util.ObjectUtil;
 
 public class EventListener implements Listener {
@@ -38,12 +39,20 @@ public class EventListener implements Listener {
 		this.plugin = plugin;
 	}
 	
+	@EventHandler
+	public void onPlayerJoin(PlayerJoinEvent event) {
+		Player player = event.getPlayer();
+		if(player.hasPermission("MCTS.update") && plugin.configuration.UPDATE_CHECK) {
+			plugin.getServer().getScheduler().runTaskLaterAsynchronously(plugin, new UpdateCheck(plugin, player, plugin.configuration.UPDATE_DOWNLOAD), 20L);
+		}
+	}
+	
 	@EventHandler(priority = EventPriority.MONITOR)
 	public void onBlockPlace(BlockPlaceEvent event) {
 		if(!event.isCancelled()) {
 			Block placed = event.getBlockPlaced();
 			Player player = event.getPlayer();
-			if(placed.getType().equals(Material.REDSTONE_BLOCK)) {
+			if(placed.getType().equals(Substation.SUBSTATION_BOTTOM)) {
 				if(substations.containsKey(player.getName().toLowerCase(Locale.ENGLISH))) {
 					Substation substation = substations.get(player.getName().toLowerCase(Locale.ENGLISH));
 					if(!substation.isRedstoneBlockPlaced()) {
@@ -51,7 +60,7 @@ public class EventListener implements Listener {
 						player.sendMessage(ChatColor.GOLD + "Now place a fence (wooden or netherbrick) next to the rail.");
 					}
 				}
-			} else if(ObjectUtil.equals(placed.getType(), Material.FENCE, Material.BIRCH_FENCE, Material.ACACIA_FENCE, Material.DARK_OAK_FENCE, Material.JUNGLE_FENCE, Material.SPRUCE_FENCE, Material.NETHER_FENCE)) {
+			} else if(ObjectUtil.equals(placed.getType(), Substation.SUBSTATION_SUPPORT.toArray())) {
 				if(substations.containsKey(player.getName().toLowerCase(Locale.ENGLISH))) {
 					Substation substation = substations.get(player.getName().toLowerCase(Locale.ENGLISH));
 					if(substation.isRedstoneBlockPlaced()) {
@@ -66,7 +75,7 @@ public class EventListener implements Listener {
 						}
 					}
 				}
-			} else if(placed.getType().equals(Material.IRON_FENCE)) {
+			} else if(placed.getType().equals(Substation.CATENARY_MATERIAL)) {
 				Bukkit.getScheduler().runTaskLater(plugin, new UpdateCatenaryRunnable(), 1L);
 			}
 		}
@@ -77,10 +86,10 @@ public class EventListener implements Listener {
 		if(!event.isCancelled()) {
 			Block broken = event.getBlock();
 			Player player = event.getPlayer();
-			if(broken.getType().equals(Material.IRON_FENCE)) {
+			if(broken.getType().equals(Substation.CATENARY_MATERIAL)) {
 				Bukkit.getScheduler().runTaskLater(plugin, new UpdateCatenaryRunnable(), 1L);
 			}
-			if(ObjectUtil.equals(broken.getType(), Material.FENCE, Material.BIRCH_FENCE, Material.ACACIA_FENCE, Material.DARK_OAK_FENCE, Material.JUNGLE_FENCE, Material.SPRUCE_FENCE, Material.NETHER_FENCE, Material.REDSTONE_BLOCK, Material.IRON_FENCE, Material.IRON_BLOCK, Material.LEVER)) {
+			if(ObjectUtil.equals(broken.getType(), Substation.SUBSTATION_SUPPORT.toArray()) || broken.getType().equals(Substation.CATENARY_MATERIAL) || broken.getType().equals(Substation.SUBSTATION_BOTTOM) || broken.getType().equals(Substation.SUBSTATION_TOP) || broken.getType().equals(Material.LEVER)) {
 				for(Substation substation : plugin.substations.values()) {
 					if(substation.isAt(broken.getLocation())) {
 						substation.delete();
@@ -169,11 +178,7 @@ public class EventListener implements Listener {
 				Player player = (Player)event.getEntered();
 				Train train = plugin.getTrain(player, false);
 				if(train != null) {
-					PlayerInventory inventory = player.getInventory();
-					int slot = inventory.first(Material.MAP);
-					if(slot > -1) {
-						inventory.getItem(slot).setDurability(train.getMapId());
-					}
+					plugin.giveControlPanelTo(player, train);
 				}
 			}
 		}

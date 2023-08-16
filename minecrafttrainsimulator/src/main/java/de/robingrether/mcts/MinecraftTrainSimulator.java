@@ -7,15 +7,16 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
-import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
+import java.util.stream.Collectors;
 
-import org.bstats.Metrics;
+import org.bstats.bukkit.Metrics;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
@@ -27,16 +28,20 @@ import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Minecart;
 import org.bukkit.entity.Player;
-import org.bukkit.inventory.PlayerInventory;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.MapMeta;
 import org.bukkit.map.MapView;
 import org.bukkit.plugin.java.JavaPlugin;
 
-import com.bergerkiller.bukkit.tc.TrainCarts;
 import com.bergerkiller.bukkit.tc.controller.MinecartGroup;
 import com.bergerkiller.bukkit.tc.controller.MinecartMember;
 import com.bergerkiller.bukkit.tc.controller.type.MinecartMemberFurnace;
 
+import de.robingrether.mcts.io.Configuration;
+import de.robingrether.mcts.io.UpdateCheck;
 import de.robingrether.mcts.render.Images;
+import de.robingrether.mcts.render.TrainMapRenderer;
+import de.robingrether.mcts.render.UnitOfSpeed;
 import de.robingrether.util.StringUtil;
 
 public class MinecraftTrainSimulator extends JavaPlugin {
@@ -44,12 +49,13 @@ public class MinecraftTrainSimulator extends JavaPlugin {
 	public static File directory;
 	private static MinecraftTrainSimulator instance;
 	
-	private Set<Train> trains = new HashSet<Train>();
-	Map<String, Substation> substations = new ConcurrentHashMap<String, Substation>();
-	Set<Location> catenary;
-	
+	Configuration configuration;
 	private EventListener listener;
 	private Metrics metrics;
+	
+	private Set<Train> trains = new HashSet<Train>(); // TODO: array list?
+	Map<String, Substation> substations = new ConcurrentHashMap<String, Substation>();
+	Map<Location, Integer> catenary;
 	
 	public void onEnable() {
 		instance = this;
@@ -57,37 +63,36 @@ public class MinecraftTrainSimulator extends JavaPlugin {
 		listener = new EventListener(this);
 		getServer().getPluginManager().registerEvents(listener, this);
 		checkDirectory();
-		loadData();
+		configuration = new Configuration(this);
+		configuration.loadData();
+		configuration.saveData();
 		Images.init();
+		TrainMapRenderer.unitOfSpeed = UnitOfSpeed.fromString(configuration.UNIT_OF_SPEED);
+		if(TrainMapRenderer.unitOfSpeed == null) {
+			TrainMapRenderer.unitOfSpeed = UnitOfSpeed.KILOMETRES_PER_HOUR;
+		}
+		if(configuration.CATENARY_HEIGHT >= 2) {
+			Substation.CATENARY_HEIGHT = configuration.CATENARY_HEIGHT;
+		}
+		if(Material.getMaterial(configuration.CATENARY_MATERIAL) != null && Material.getMaterial(configuration.CATENARY_MATERIAL).isBlock()) {
+			Substation.CATENARY_MATERIAL = Material.getMaterial(configuration.CATENARY_MATERIAL);
+		}
+		if(Material.getMaterial(configuration.CATENARY_SUBSTATION_BOTTOM) != null && Material.getMaterial(configuration.CATENARY_SUBSTATION_BOTTOM).isBlock()) {
+			Substation.SUBSTATION_BOTTOM = Material.getMaterial(configuration.CATENARY_SUBSTATION_BOTTOM);
+		}
+		if(Material.getMaterial(configuration.CATENARY_SUBSTATION_TOP) != null && Material.getMaterial(configuration.CATENARY_SUBSTATION_TOP).isSolid()) {
+			Substation.SUBSTATION_TOP = Material.getMaterial(configuration.CATENARY_SUBSTATION_TOP);
+		}
+		Substation.SUBSTATION_SUPPORT = configuration.CATENARY_SUBSTATION_SUPPORT.stream().map(materialName -> Material.getMaterial(materialName)).collect(Collectors.toList());
+		loadData();
 		metrics = new Metrics(this);
-		metrics.addCustomChart(new Metrics.SingleLineChart("steamTrains") {
-			
-			public int getValue() {
-				int c = 0;
-				for(Train train : trains)
-					if(train instanceof SteamTrain) c++;
-				return c;
-			}
-			
-		});
-		metrics.addCustomChart(new Metrics.SingleLineChart("electricTrains") {
-			
-			public int getValue() {
-				int c = 0;
-				for(Train train : trains)
-					if(train instanceof ElectricTrain) c++;
-				return c;
-			}
-			
-		});
-		metrics.addCustomChart(new Metrics.SingleLineChart("substations") {
-			
-			public int getValue() {
-				return substations.size();
-			}
-			
-		});
+		metrics.addCustomChart(new Metrics.SingleLineChart("steamTrains", () -> {int c = 0; for(Train train : trains) if(train instanceof SteamTrain) c++; return c;}));
+		metrics.addCustomChart(new Metrics.SingleLineChart("electricTrains", () -> {int c = 0; for(Train train : trains) if(train instanceof ElectricTrain) c++; return c;}));
+		metrics.addCustomChart(new Metrics.SingleLineChart("substations", () -> substations.size()));
 		updateCatenary();
+		if(configuration.UPDATE_CHECK) {
+			getServer().getScheduler().runTaskLaterAsynchronously(this, new UpdateCheck(this, getServer().getConsoleSender(), configuration.UPDATE_DOWNLOAD), 20L);
+		}
 		getLogger().log(Level.INFO, getFullName() + " enabled!");
 	}
 	
@@ -115,10 +120,10 @@ public class MinecraftTrainSimulator extends JavaPlugin {
 					} else {
 						Train train = getTrain(player);
 						if(train instanceof SteamTrain) {
-							if(SteamTrain.isFuel(player.getItemInHand().getType())) {
-								int fuel = player.getItemInHand().getAmount() * 2000;
+							if(SteamTrain.isFuel(player.getInventory().getItemInMainHand().getType())) {
+								int fuel = player.getInventory().getItemInMainHand().getAmount() * 2000;
 								train.addFuel(fuel);
-								player.setItemInHand(null);
+								player.getInventory().setItemInMainHand(null);
 								sender.sendMessage(ChatColor.GOLD + "Added fuel to the train.");
 							} else {
 								sender.sendMessage(ChatColor.RED + "You have to hold coal in your hand.");
@@ -158,11 +163,7 @@ public class MinecraftTrainSimulator extends JavaPlugin {
 									train.setLeader(player);
 								}
 								sender.sendMessage(ChatColor.GOLD + "Created steam train.");
-								PlayerInventory inventory = player.getInventory();
-								int slot = inventory.first(Material.MAP);
-								if(slot > -1) {
-									inventory.getItem(slot).setDurability(train.getMapId());
-								}
+								giveControlPanelTo(player, train);
 							}
 						} else if(args[1].equalsIgnoreCase("electric")) {
 							MinecartGroup minecarts = MinecartGroup.get(player.getVehicle());
@@ -177,11 +178,7 @@ public class MinecraftTrainSimulator extends JavaPlugin {
 									train.setLeader(player);
 								}
 								sender.sendMessage(ChatColor.GOLD + "Created electric train.");
-								PlayerInventory inventory = player.getInventory();
-								int slot = inventory.first(Material.MAP);
-								if(slot > -1) {
-									inventory.getItem(slot).setDurability(train.getMapId());
-								}
+								giveControlPanelTo(player, train);
 							}
 						} else {
 							sender.sendMessage(ChatColor.RED + "Wrong usage: /mcts create <coal/electric>");
@@ -376,49 +373,72 @@ public class MinecraftTrainSimulator extends JavaPlugin {
 	}
 	
 	private boolean containsPoweredMinecart(MinecartGroup minecarts) {
-		for(MinecartMember<?> minecart : minecarts) {
-			if(minecart instanceof MinecartMemberFurnace) {
-				return true;
+		if(minecarts != null) {
+			for(MinecartMember<?> minecart : minecarts) {
+				if(minecart instanceof MinecartMemberFurnace) {
+					return true;
+				}
 			}
 		}
 		return false;
 	}
 	
 	public void updateCatenary() {
-		catenary = new HashSet<Location>();
+		catenary = new HashMap<Location, Integer>();
 		for(Substation substation : substations.values()) {
 			if(!substation.isTurnedOn()) {
 				continue;
 			}
-			Set<Block> lastCatenary = new HashSet<Block>(), neighbors = new HashSet<Block>();
-			Set<Location> substationCatenary = new HashSet<Location>();
-			int distance = 1;
-			catenary.add(substation.getIronFenceLocation());
-			lastCatenary.add(substation.getIronFenceLocation().getBlock());
-			substationCatenary.add(substation.getIronFenceLocation());
-			while(distance < substation.getVoltage() / 10) {
+			int power = substation.getVoltage();
+			Set<Location> lastCatenary = new HashSet<Location>(), neighbors = new HashSet<Location>();
+			catenary.put(substation.getIronFenceLocation(), power);
+			lastCatenary.add(substation.getIronFenceLocation());
+			
+			while(power > 0) {
 				neighbors.clear();
-				for(Block block : lastCatenary) {
-					neighbors.addAll(Arrays.asList(getNeighbors(block)));
-				}
-				lastCatenary.clear();
-				for(Block block : neighbors) {
-					if(block.getType().equals(Material.IRON_FENCE) && !substationCatenary.contains(block.getLocation())) {
-						catenary.add(block.getLocation());
-						lastCatenary.add(block);
-						substationCatenary.add(block.getLocation());
+				for(Location location : lastCatenary) {
+					Block block = location.getBlock();
+					for(Block neighbor : new Block[] {block.getRelative(BlockFace.UP), block.getRelative(BlockFace.DOWN), block.getRelative(BlockFace.EAST), block.getRelative(BlockFace.WEST), block.getRelative(BlockFace.NORTH), block.getRelative(BlockFace.SOUTH)}) {
+						neighbors.add(neighbor.getLocation());
 					}
 				}
-				if(lastCatenary.isEmpty()) {
-					break;
+				lastCatenary.clear();
+				for(Location location : neighbors) {
+					if(location.getBlock().getType().equals(Material.IRON_BARS)) {
+						if(!catenary.containsKey(location) || catenary.get(location) < power) {
+							catenary.put(location, power);
+							lastCatenary.add(location);
+						}
+					}
 				}
-				distance++;
+				if(lastCatenary.isEmpty()) break;
+				power -= 10;
 			}
+//			Set<Block> lastCatenary = new HashSet<Block>(), neighbors = new HashSet<Block>();
+//			Set<Location> substationCatenary = new HashSet<Location>();
+//			int distance = 1;
+//			catenary.add(substation.getIronFenceLocation());
+//			lastCatenary.add(substation.getIronFenceLocation().getBlock());
+//			substationCatenary.add(substation.getIronFenceLocation());
+//			while(distance < substation.getVoltage() / 10) {
+//				neighbors.clear();
+//				for(Block block : lastCatenary) {
+//					neighbors.addAll(Arrays.asList(getNeighbors(block)));
+//				}
+//				lastCatenary.clear();
+//				for(Block block : neighbors) {
+//					if(block.getType().equals(Material.IRON_BARS) && !substationCatenary.contains(block.getLocation())) {
+//						catenary.add(block.getLocation());
+//						lastCatenary.add(block);
+//						substationCatenary.add(block.getLocation());
+//					}
+//				}
+//				if(lastCatenary.isEmpty()) {
+//					break;
+//				}
+//				distance++;
+//			}
 		}
-	}
-	
-	private Block[] getNeighbors(Block block) {
-		return new Block[]{block.getRelative(BlockFace.UP), block.getRelative(BlockFace.DOWN), block.getRelative(BlockFace.EAST), block.getRelative(BlockFace.WEST), block.getRelative(BlockFace.NORTH), block.getRelative(BlockFace.SOUTH)};
 	}
 	
 	public Train getTrain(Player player) {
@@ -454,6 +474,17 @@ public class MinecraftTrainSimulator extends JavaPlugin {
 		return map;
 	}
 	
+	void giveControlPanelTo(Player player, Train train) {
+		ItemStack mapItem = player.getInventory().getItemInMainHand();
+		if((Material.MAP.equals(mapItem.getType()) || Material.FILLED_MAP.equals(mapItem.getType())) && mapItem.getAmount() == 1) {
+			ItemStack controlPanelItem = new ItemStack(Material.FILLED_MAP);
+			MapMeta meta = (MapMeta)controlPanelItem.getItemMeta();
+			meta.setMapView(train.getControlPanel());
+			controlPanelItem.setItemMeta(meta);
+			player.getInventory().setItemInMainHand(controlPanelItem);
+		}
+	}
+	
 	private void terminateTrains() {
 		for(Train train : trains) {
 			train.terminate();
@@ -472,6 +503,10 @@ public class MinecraftTrainSimulator extends JavaPlugin {
 		player.sendMessage(ChatColor.GOLD + " /df  /dn  /db - Change the direction");
 		player.sendMessage(ChatColor.GOLD + " /p4  /p3  /p2  /p1  /neutral  /b1  /b2  /b3  /b4");
 		player.sendMessage(ChatColor.GOLD + " - Control the accelerator and brake");
+	}
+	
+	public File getPluginFile() {
+		return getFile();
 	}
 	
 	public static MinecraftTrainSimulator getInstance() {
