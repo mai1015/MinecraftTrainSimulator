@@ -47,6 +47,7 @@
             <groupId>com.github.robingrether</groupId>
             <artifactId>Utility</artifactId>
             <version>eb5e1ea9fd</version>
+            <scope>compile</scope>
         </dependency>
         <dependency>
             <groupId>com.bergerkiller.bukkit</groupId>
@@ -75,7 +76,14 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
-                <version>2.3</version>
+                <version>3.5.0</version>
+                <configuration>
+                    <artifactSet>
+                        <includes>
+                            <include>de.robingrether.util:*</include>
+                        </includes>
+                    </artifactSet>
+                </configuration>
                 <executions>
                     <execution>
                         <phase>package</phase>
