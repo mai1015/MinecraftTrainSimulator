@@ -16,7 +16,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 import java.util.stream.Collectors;
 
-import org.bstats.bukkit.Metrics;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
@@ -42,7 +41,6 @@ import de.robingrether.mcts.io.UpdateCheck;
 import de.robingrether.mcts.render.Images;
 import de.robingrether.mcts.render.TrainMapRenderer;
 import de.robingrether.mcts.render.UnitOfSpeed;
-import de.robingrether.util.StringUtil;
 
 public class MinecraftTrainSimulator extends JavaPlugin {
 	
@@ -51,8 +49,7 @@ public class MinecraftTrainSimulator extends JavaPlugin {
 	
 	Configuration configuration;
 	private EventListener listener;
-	private Metrics metrics;
-	
+
 	private Set<Train> trains = new HashSet<Train>(); // TODO: array list?
 	Map<String, Substation> substations = new ConcurrentHashMap<String, Substation>();
 	Map<Location, Integer> catenary;
@@ -85,10 +82,6 @@ public class MinecraftTrainSimulator extends JavaPlugin {
 		}
 		Substation.SUBSTATION_SUPPORT = configuration.CATENARY_SUBSTATION_SUPPORT.stream().map(materialName -> Material.getMaterial(materialName)).collect(Collectors.toList());
 		loadData();
-		metrics = new Metrics(this);
-		metrics.addCustomChart(new Metrics.SingleLineChart("steamTrains", () -> {int c = 0; for(Train train : trains) if(train instanceof SteamTrain) c++; return c;}));
-		metrics.addCustomChart(new Metrics.SingleLineChart("electricTrains", () -> {int c = 0; for(Train train : trains) if(train instanceof ElectricTrain) c++; return c;}));
-		metrics.addCustomChart(new Metrics.SingleLineChart("substations", () -> substations.size()));
 		updateCatenary();
 		if(configuration.UPDATE_CHECK) {
 			getServer().getScheduler().runTaskLaterAsynchronously(this, new UpdateCheck(this, getServer().getConsoleSender(), configuration.UPDATE_DOWNLOAD), 20L);
