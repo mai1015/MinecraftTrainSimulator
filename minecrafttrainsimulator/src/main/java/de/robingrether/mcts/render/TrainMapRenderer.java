@@ -36,28 +36,28 @@ public class TrainMapRenderer extends MapRenderer {
 			canvas.drawImage(0, 0, Images.getImage(0));
 			canvas.drawImage(4, 19, Images.getImage((train instanceof ElectricTrain ? 3 : 1) + (train.isAccelerating() ? 1 : 0)));
 			
-//			canvas.drawText(44, 8, Font, "ง16;MCTS");
-//			canvas.drawText(84 - Font.getWidth("2.1"), 8, Font, "ง16;2.1");
+//			canvas.drawText(44, 8, Font, "ยง16;MCTS");
+//			canvas.drawText(84 - Font.getWidth("2.1"), 8, Font, "ยง16;2.1");
 			
-//			canvas.drawText(123 - Font.getWidth("Speed"), 51, Font, "ง16;Speed");
+//			canvas.drawText(123 - Font.getWidth("Speed"), 51, Font, "ยง16;Speed");
 			text = speedFormat.format(unitOfSpeed.convert(train.getMinecarts().getAverageForce())) + unitOfSpeed.getSymbol();
 			canvas.drawText(123 - Font.getWidth(text), 61, Font, text);
 			
-//			canvas.drawText(123 - Font.getWidth("Height"), 25, Font, "ง16;Height");
+//			canvas.drawText(123 - Font.getWidth("Height"), 25, Font, "ยง16;Height");
 			text = Integer.toString(train.getMinecarts().head().getBlock(0, -1, 0).getY());
 			canvas.drawText(123 - Font.getWidth(text), 35, Font, text);
 			
-//			canvas.drawText(123 - Font.getWidth("Fuel"), 77, Font, "ง16;Fuel");
+//			canvas.drawText(123 - Font.getWidth("Fuel"), 77, Font, "ยง16;Fuel");
 			text = train instanceof ElectricTrain ? (train.hasFuel() ? "yes" : "no") : Integer.toString(train.getFuel());
 			canvas.drawText(123 - Font.getWidth(text), 87, Font, text);
 			
-//			canvas.drawText(5, 51, Font, "ง16;Direction");
+//			canvas.drawText(5, 51, Font, "ยง16;Direction");
 			canvas.drawText(5, 61, Font, signedFormat.format(train.getDirection()));
 			
-//			canvas.drawText(5, 77, Font, "ง16;Lever");
+//			canvas.drawText(5, 77, Font, "ยง16;Lever");
 			canvas.drawText(5, 87, Font, signedFormat.format(train.getCombinedLever()));
 			
-//			canvas.drawText(5, 103, Font, "ง16;Name");
+//			canvas.drawText(5, 103, Font, "ยง16;Name");
 			canvas.drawText(5, 113, Font, train.getMinecarts().getProperties().getDisplayName());
 		} catch(NullPointerException e) {
 			return;
